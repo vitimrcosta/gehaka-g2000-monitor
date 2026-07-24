@@ -1,0 +1,31 @@
+# Python cache and virtual env
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.venv/
+
+# Build artifacts
+build/
+dist/
+*.spec.bak
+
+# Runtime/generated folders
+logs/
+tickets/
+g2000_capturas/
+
+# Runtime/generated files
+TicketGerado.txt
+TicketGerado_preview.txt
+g2000_*.txt
+
+# Local runtime config (contains machine-specific values)
+config.json
+gehaka_monitor_config.json
+
+# OS/editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

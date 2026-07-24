@@ -1,0 +1,32 @@
+ GEHAKA Medidor de Umidade G2000
+================================
+Versao de Firmware      1.6.261
+Versao de Hardware         1.00
+Numero de Serie  19111302001014
+Hora 15:22:09     Data 20/07/26
+================================
+Produto = Sorgo
+Versao Equacao ..= 13834
+Data Val. Curva .= 15/04/27
+Amostra Numero ..= 9900
+Temp.Amostra ....=   30,9 °C
+Temp.Instru. ....=   30,8 °C
+Peso Amostra ....=  142,4 g
+
+Umidade .........=  11,71 %
+================================
+
+
+
+
+
+
+
+Assinatura
+
+5R9q105luW9neDIe+A001b0l
+1czdPwXZ/VGbnCZdc3o=
+CeLUKTMYvFT3A1YZCEFeoc8v+Sl1+6cR
+B04s13T+qFJGgx1zdSqLTG7re5fSBcb9
+mpd66rdoF5GEwhChI0IyLA==
+================================
