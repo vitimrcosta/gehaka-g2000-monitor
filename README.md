@@ -72,17 +72,6 @@ python gehaka_monitor_diag2.py
 
 Arquivo `config.json` esperado:
 
-```json
-{
-  "com_port": "COM3",
-  "baudrate": 115200,
-  "printer_mode": "shared",
-  "printer_path": "\\\\192.1.2.43\\MP4200",
-  "printer_ip": "",
-  "printer_port": ""
-}
-```
-
 Campos:
 
 1. `com_port`: porta serial fixa do G2000.
