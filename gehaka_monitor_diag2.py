@@ -31,6 +31,8 @@ DEFAULT_BAUD_RATE = 115200
 DEFAULT_PRINTER_MODE = "Compartilhada (TXT/SMB)"
 DEFAULT_SHARED_PRINTER_PATH = r"\\192.1.2.43\MP4200"
 RECONNECT_INTERVAL_SECONDS = 5.0
+DEFAULT_SERIAL_READ_TIMEOUT_SECONDS = 0.5
+DEFAULT_PACKET_GAP_TIMEOUT_SECONDS = 1.5
 TICKET_WIDTH_80MM = 42
 TICKET_SEPARATOR = "=" * 38
 
@@ -141,6 +143,14 @@ class GehakaMonitorBridgeApp:
         self.initial_setup_pending = False
         self.manual_port_override = (self.config_data.get("com_port") or self.config_data.get("manual_port_override") or "").strip()
         self.manual_baud_rate = self.parse_int_value(self.config_data.get("baudrate", self.config_data.get("manual_baud_rate")), DEFAULT_BAUD_RATE)
+        self.serial_read_timeout_seconds = self.parse_float_value(
+            self.config_data.get("serial_read_timeout_seconds", self.config_data.get("read_timeout_seconds")),
+            DEFAULT_SERIAL_READ_TIMEOUT_SECONDS,
+        )
+        self.packet_gap_timeout_seconds = self.parse_float_value(
+            self.config_data.get("packet_gap_timeout_seconds", self.config_data.get("packet_timeout_seconds")),
+            DEFAULT_PACKET_GAP_TIMEOUT_SECONDS,
+        )
         self.printer_mode_var = tk.StringVar(value=self.map_config_printer_mode_to_ui(self.config_data.get("printer_mode")))
         initial_printer_value = (
             self.config_data.get("printer_path")
@@ -326,17 +336,15 @@ class GehakaMonitorBridgeApp:
         self.is_app_exiting = True
         self.append_maintenance_log("Encerrando aplicação...")
 
-        if self.reconnect_job is not None:
-            self.root.after_cancel(self.reconnect_job)
-            self.reconnect_job = None
+        self.disconnect(update_ui=False)
 
-        self.stop_thread = True
-        if self.serial_port and self.serial_port.is_open:
+        if self.read_thread and self.read_thread.is_alive() and threading.current_thread() is not self.read_thread:
             try:
-                self.serial_port.close()
+                # Wait briefly for the reader loop to observe stop flag and exit cleanly.
+                self.read_thread.join(timeout=1.5)
             except Exception:
                 pass
-        self.serial_port = None
+        self.read_thread = None
 
         if self.tray_icon is not None:
             try:
@@ -445,6 +453,12 @@ class GehakaMonitorBridgeApp:
         except (TypeError, ValueError):
             return default
 
+    def parse_float_value(self, value, default):
+        try:
+            return float(value)
+        except (TypeError, ValueError):
+            return default
+
     def map_config_printer_mode_to_ui(self, mode_value):
         return "Rede (TCP/IP)" if str(mode_value).strip().lower() == "tcp" else DEFAULT_PRINTER_MODE
 
@@ -537,6 +551,8 @@ class GehakaMonitorBridgeApp:
             "computer_ip": computer_ip,
             "printer_ip": self.printer_ip_var.get().strip(),
             "printer_port": self.printer_port_var.get().strip(),
+            "serial_read_timeout_seconds": self.serial_read_timeout_seconds,
+            "packet_gap_timeout_seconds": self.packet_gap_timeout_seconds,
         }
         try:
             with open(self.config_path, "w", encoding="utf-8") as config_file:
@@ -1118,6 +1134,9 @@ class GehakaMonitorBridgeApp:
         self.refresh_maintenance_window()
 
     def auto_connect(self):
+        if self.is_app_exiting:
+            return
+
         self.reconnect_job = None
 
         if self.serial_port and self.serial_port.is_open:
@@ -1142,7 +1161,7 @@ class GehakaMonitorBridgeApp:
                 bytesize=serial.EIGHTBITS,
                 parity=serial.PARITY_NONE,
                 stopbits=serial.STOPBITS_ONE,
-                timeout=0.2,
+                timeout=self.serial_read_timeout_seconds,
                 xonxoff=False,
                 rtscts=False,
             )
@@ -1173,6 +1192,9 @@ class GehakaMonitorBridgeApp:
         self.read_thread.start()
 
     def schedule_reconnect(self):
+        if self.is_app_exiting:
+            return
+
         if self.reconnect_job is not None:
             return
 
@@ -1247,18 +1269,29 @@ class GehakaMonitorBridgeApp:
             self.last_print_var.set("Erro")
             self.append_maintenance_log(f"Falha no teste temporário: {self.last_error_var.get()}")
 
-    def disconnect(self):
+    def disconnect(self, update_ui=True):
         self.stop_thread = True
         if self.reconnect_job is not None:
-            self.root.after_cancel(self.reconnect_job)
+            try:
+                self.root.after_cancel(self.reconnect_job)
+            except Exception:
+                pass
             self.reconnect_job = None
         if self.serial_port and self.serial_port.is_open:
-            self.serial_port.close()
+            try:
+                self.serial_port.reset_input_buffer()
+            except Exception:
+                pass
+            try:
+                self.serial_port.close()
+            except Exception:
+                pass
         self.serial_port = None
-        self.g2000_status_var.set("� Desconectado")
-        self.status_label.set("Aguardando dispositivo G2000...")
+        if update_ui:
+            self.g2000_status_var.set("� Desconectado")
+            self.status_label.set("Aguardando dispositivo G2000...")
         self.current_port_name = None
-        self.append_maintenance_log("Conexão serial encerrada.")
+        self.append_maintenance_log("Conexão serial encerrada e porta COM liberada.")
 
     def read_loop(self):
         while not self.stop_thread:
@@ -1276,7 +1309,7 @@ class GehakaMonitorBridgeApp:
                 continue
 
             now = time.monotonic()
-            if self.packet_buffer and (now - self.last_data_time) > 0.35:
+            if self.packet_buffer and (now - self.last_data_time) > self.packet_gap_timeout_seconds:
                 self.dispatch_packet("timeout")
 
             self.packet_buffer.extend(data)
@@ -1290,7 +1323,8 @@ class GehakaMonitorBridgeApp:
             if data == b"\x03":
                 self.dispatch_packet("ETX")
 
-        self.root.after(0, self.handle_disconnection)
+        if not self.is_app_exiting:
+            self.root.after(0, self.handle_disconnection)
 
     def dispatch_packet(self, trigger):
         if not self.packet_buffer:
@@ -1301,6 +1335,9 @@ class GehakaMonitorBridgeApp:
         self.root.after(0, self.finalize_packet, raw_packet, trigger)
 
     def handle_disconnection(self, reason=None):
+        if self.is_app_exiting:
+            return
+
         if reason:
             self.last_error_var.set(reason)
         self.disconnect()

@@ -76,9 +76,13 @@ Campos:
 
 1. `com_port`: porta serial fixa do G2000.
 2. `baudrate`: velocidade serial.
-3. `printer_mode`: `shared` ou `tcp`.
-4. `printer_path`: caminho UNC quando `shared`.
-5. `printer_ip` e `printer_port`: usados quando `tcp`.
+3. `serial_read_timeout_seconds`: tempo máximo de espera por bytes na leitura serial. O padrão atual é `0.5`.
+4. `packet_gap_timeout_seconds`: tempo máximo de silêncio entre bytes antes de o programa considerar o pacote concluído. O padrão atual é `1.5`.
+5. `printer_mode`: `shared` ou `tcp`.
+6. `printer_path`: caminho UNC quando `shared`.
+7. `printer_ip` e `printer_port`: usados quando `tcp`.
+
+Se o G2000 estiver em cabo USB longo ou com resposta mais lenta, aumente primeiro `packet_gap_timeout_seconds`. Só reduza `serial_read_timeout_seconds` se quiser que o loop acorde mais rapidamente para verificar novos dados.
 
 ## Atalhos
 
